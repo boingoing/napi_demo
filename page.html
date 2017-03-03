@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NAPI Demo</title>
+    
+    <script>
+        var server = "http://127.0.0.1:1338/";
+ 
+        function onButtonClicked() {
+            var dbText = document.getElementById("DB_VALUES");
+            dbText.innerHTML += "%DB_ENTRY_STRING%";
+            var xhttp = new XMLHttpRequest();
+            xhttp.open("GET", server + "OnButtonClicked");
+            xhttp.send();
+        }
+    </script>
+    <style>
+        .taskListItem{
+            font-size: 14pt;
+            color: black;          
+        }
+        .task-summary{
+            font-size: 14pt;
+            color: black;
+            font-weight: 600;
+            padding-left:5px;
+       }
+        .task-summary+Infinity{
+            font-size: 14pt;
+            color: orangered;
+            font-weight: 600;
+            padding-left:5px;
+       }
+       #userTaskList {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #333;
+        }
+
+        #userTaskList li {
+            float: left;
+        }
+
+        #userTaskList li a {
+            display: block;
+            color: white;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+        #userTaskList a:hover:not(.active) {
+            background-color: #111;
+        }
+        .active {
+        background-color:#4CAF50;
+        }
+        .title {	
+            padding-left:5px
+        }
+        
+        .test{
+        margin-left: 25em
+        }
+        .button {
+        font: 14px "Trebuchet MS", sans-serif;
+        padding: 8px 16px;
+        display:inline-block;
+        text-decoration: none;
+        border-radius: 3px;
+        border:0;
+        margin:0;
+        }
+        .button:hover{
+        background-color: lightslategrey;
+        }
+
+        #userTaskList {	
+            font-size: 16px;
+            font-weight: 500;
+            padding-left:5px
+        }
+        #header {	
+            background-color: #4dd87b;
+            color: white;
+            border: none;
+            font-size: 24px;
+            font-weight: 600;
+            padding-left:5px;
+            font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+            padding: 5px;
+        }
+        
+        .DBHeader{
+            color: black; font-size: 15pt; 
+            font-family: "Calibiri", "Trebuchet MS", sans-serif;
+            background-color: lightgrey;
+            padding: 5px;
+            font-weight:bold;
+        }
+
+        .DBEntry{
+            color: blue; font-size: 15pt; 
+            font-family: "Calibiri", "Trebuchet MS", sans-serif;
+        }
+
+        body{
+            margin-top: 20px; margin-bottom: 0px; margin-left: 2px; margin-right: 2px;
+            padding: 0;
+            color: black; font-size: 10pt; 
+            font-family: "Calibiri", "Trebuchet MS", sans-serif;
+            background-color: #E2E2E2;
+        }
+            
+        div.mainContainer{
+            font-size: 24px;
+            font-weight: 600;
+            height: auto; width: auto;
+            background-color: #FFFFFF;
+            margin-left: 5em	; margin-right: 5em;
+            padding: 0;
+        }
+   </style>
+    
+</head>
+
+<body>
+<div class="mainContainer">
+    <div id="header">Node API Demo</div>
+    <i></i>
+    <ul id="NodeVerString">%NODE_VERSION_STRING%</ul>
+    <p class="test"><input class="button" type="submit" value="Add entry to LevelDB database"  onclick='onButtonClicked()'/></p>
+    <hr>
+    <ul id="DB_VALUES">%DB_VALUES%</ul>
+    </div>
+</body>
+</html>
