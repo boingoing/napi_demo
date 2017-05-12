@@ -1,43 +1,45 @@
 var leveldown = require('leveldown');
 var http = require('http');
 var fs = require("fs");
-var leveldown = require('leveldown');
+var yargs = require("yargs");
 require('es6-shim');
 
-var server = http.createServer(createHomePage);
-server.listen(1338);
+var argv = parseArgs(yargs);
 
-var _nodeVersion = process.versions.node;
-if(process.jsEngine === "chakracore") {
-    _nodeVersion += " (ChakraCore)";
+trace('Detected Node: ' + getNodeVersion());
+
+if (argv.test) {
+    simpleTest();
+} else {
+    createServer();
 }
 
-console.log("Server running at http://127.0.0.1:1338/");
-console.log("Detected Node: " + _nodeVersion);
+function createServer() {
+    var server = http.createServer(createHomePage);
+    server.listen(argv.port);
+    trace('Server running at ' + argv.serverUrl);
+}
 
 function createHomePage(request, response) {
     var rqUrl = request.url;
 
-    console.log('Request: ' + rqUrl);
-
-    //Get the LevelDB instance 
-    var _db = leveldown('./dbout');
+    trace('Request: ' + rqUrl);
 
     if(rqUrl === '/') {
         function databaseReadCallback(dbValues) {
             //build dynamic values for replacement in HTML Template
             var variableReplacementMap = new Map();
-            variableReplacementMap.set('%NODE_VERSION_STRING%', GetNodeVersionString());
-            variableReplacementMap.set('%DB_ENTRY_STRING%', GetEntryString(GetNow(), _nodeVersion));        
-            variableReplacementMap.set('%DB_VALUES%', dbValues);
+            variableReplacementMap.set('%NODE_VERSION_STRING%', getNodeVersion());
+            variableReplacementMap.set('%DB_VALUES%', JSON.stringify(dbValues));
+            variableReplacementMap.set('%SERVER_URL%', argv.serverUrl);
             
             //render HTML
             response.writeHead(200, { "Content-Type": "text/html", 'Cache-control': 'no-cache' });
-            response.write(BuildFinalHTML(variableReplacementMap));
+            response.write(buildFinalHTML(variableReplacementMap));
             response.end();
         }
 
-        ReadFromDatabase(_db, databaseReadCallback);
+        readFromDatabase(databaseReadCallback);
     }
     if(rqUrl === "/OnButtonClicked") {
         function successCallback() {
@@ -45,7 +47,7 @@ function createHomePage(request, response) {
             response.end();
         }
 
-        AddToDatabase(_db, GetNow(), _nodeVersion, successCallback);
+        addToDatabase(getTime(), getNodeVersion(), successCallback);
     }
     if(rqUrl === "/favicon.ico") {
         response.writeHead(404, { "Content-Type": "text/html", 'Cache-control': 'no-cache' });
@@ -53,19 +55,7 @@ function createHomePage(request, response) {
     }
 }
 
-function GetNow() {
-    return new Date().toTimeString();
-}
-
-function GetEntryString(timestamp, version) {
-    return "Entry added on: <id class='DBEntry'>" + timestamp + "</id> by Node version: <id class='DBEntry'>" + version +"</id><br>";
-}
-
-function GetNodeVersionString() {   
-    return 'Demo running on Node Version: '+ _nodeVersion + "<br><br>" + "Current Time: " + GetNow(); 
-}
-
-function BuildFinalHTML(variableMap) {
+function buildFinalHTML(variableMap) {
     var htmlPageTemplate = fs.readFileSync(__dirname + "/page.html", 'utf8');
 
     variableMap.forEach(function (value, key) {
@@ -73,7 +63,7 @@ function BuildFinalHTML(variableMap) {
         //We don't want to abort but we should report them for later triage.
         if (value === undefined || value === NaN || value === Infinity) {
             var msg = 'Potentially bad value encountered in templating -- ' + value + ' @ timestamp ' + Date.now() + '.';
-            console.log(msg);
+            trace(msg);
         }
 
         var allregex = new RegExp(key, 'g')
@@ -82,93 +72,175 @@ function BuildFinalHTML(variableMap) {
     return htmlPageTemplate;
 }
 
-function ReadFromDatabase(_db, callback) {
-    var dbValues = "<p class=\"DBHeader\">LevelDown DB entries</p> <br>";
+function padUnder10(v) {
+    return v < 10 ? '0' + v : v;
+}
 
-    console.log('leveldown#open...');
-    _db.open(function(err) {
+function getNodeVersion() {
+    return process.versions.node + (process.jsEngine === "chakracore" ? ' (ChakraCore)' : '');
+}
+
+function getTime() {
+    var date = new Date();
+    var y = date.getFullYear();
+    var mon = padUnder10(date.getMonth() + 1);
+    var d = padUnder10(date.getDate());
+    var h = padUnder10(date.getHours());
+    var min = padUnder10(date.getMinutes());
+    var s = padUnder10(date.getSeconds());
+    return `${y}/${mon}/${d} ${h}:${min}:${s}`;
+}
+
+function getDatabase() {
+    return leveldown(argv.path);
+}
+
+function readFromDatabase(callback) {
+    var db = getDatabase();
+    var dbValues = [];
+
+    trace('leveldown#open...');
+    db.open(function(err) {
         if(!err) {
-            console.log('leveldown#open succeeded');
+            trace('leveldown#open succeeded');
             var count = 0;
 
-            console.log('leveldown#iterator...');
-            var iterator = _db.iterator({
+            trace('leveldown#iterator...');
+            var iterator = db.iterator({
                 keyAsBuffer: false,
                 valueAsBuffer: false,
                 fillCache: true
             });
-            console.log('leveldown#iterator succeeded');
+            trace('leveldown#iterator succeeded');
 
             function endCallback(err) {
                 if (!err) {
-                    console.log("iterator#end succeeded: Found " + count + " entries.");
-
-                    callback(dbValues);
+                    trace("iterator#end succeeded: Found " + count + " entries.");
                 } else {
-                    console.log('iterator#end failed: ' + err);
+                    trace('iterator#end failed: ' + err);
                 }
-                _db.close(function(err){
+                db.close(function(err){
                     if (!err) {
-                        console.log('leveldown#close succeeded');
+                        trace('leveldown#close succeeded');
+                        callback(dbValues);
                     } else {
-                        console.log('leveldown#close failed: ' + err);
+                        trace('leveldown#close failed: ' + err);
                     }
                 });
             }
 
             function nextCallback(err, key, value) {
                 if (!err) {
-                    //console.log('iterator#next succeeded');
+                    verboseTrace('iterator#next succeeded');
 
                     if (err === undefined && key === undefined && value === undefined) {
-                        console.log('iterator#end...');
+                        trace('iterator#end...');
                         iterator.end(endCallback);
                     } else {
-                        dbValues += GetEntryString(key, value);
+                        dbValues.push([key, value]);
                         count++;
 
-                        //console.log('iterator#next...')
+                        verboseTrace('iterator#next...')
                         iterator.next(nextCallback);
                     }
                 } else {
-                    console.log("iterator#next failed: " + err);
+                    trace("iterator#next failed: " + err);
                 }
             }
 
-            console.log("iterator#next...");
+            trace("iterator#next...");
             iterator.next(nextCallback);
         } else {
-            console.log('leveldown#open failed: ' + err);
+            trace('leveldown#open failed: ' + err);
         }
     });
 }
 
-function AddToDatabase(_db, key, value, callback) {
-    console.log('leveldown#open...');
-    _db.open(function(err) {
+function addToDatabase(key, value, callback) {
+    var db = getDatabase();
+    
+    trace('leveldown#open...');
+    db.open(function(err) {
         if(!err) {
-            console.log('leveldown#open succeeded');
-            console.log('leveldown#put("' + key + '", "' + value + '")...');
+            trace('leveldown#open succeeded');
+            trace('leveldown#put("' + key + '", "' + value + '")...');
 
-            _db.put(key, value, { sync: true }, function(err) {
+            db.put(key, value, { sync: true }, function(err) {
                 if(!err) {
-                    console.log('leveldown#put succeeded');
-                    callback();
+                    trace('leveldown#put succeeded');
                 } else {
-                    console.log('leveldown#put failed: ' + err);
+                    trace('leveldown#put failed: ' + err);
                 }
 
-                console.log('leveldown#close...');
-                _db.close(function(err) {
+                trace('leveldown#close...');
+                db.close(function(err) {
                     if (!err) {
-                        console.log('leveldown#close succeeded')
+                        trace('leveldown#close succeeded');
+                        callback();
                     } else {
-                        console.log('leveldown#close failed: ' + err)
+                        trace('leveldown#close failed: ' + err);
                     }
                 });
             });
         } else {
-            console.log('leveldown#open failed: ' + err);
+            trace('leveldown#open failed: ' + err);
         }
     });
+}
+
+function trace(msg) {
+    console.log(msg);
+}
+
+function verboseTrace(msg) {
+    if (argv.verbose) {
+        trace(msg);
+    }
+}
+
+function parseArgs(yargs) {
+    var _argv = yargs
+        .option('port', {
+            default: 1338,
+            type: 'number',
+            describe: 'Start an http server listening on this port'
+        })
+        .option('path', {
+            default: './dbout',
+            type: 'string',
+            describe: 'Path in which we will create a leveldb database'
+        })
+        .option('verbose', {
+            default: false,
+            type: 'boolean',
+            describe: 'Enable verbose logging'
+        })
+        .option('test', {
+            default: false,
+            type: 'boolean',
+            describe: 'Perform a simple test of the leveldown module (Does not start the http server)'
+        })
+        .usage('Simple http server using leveldown to test Node.js with N-API.\nUsage: $0 --port [number] --path [database_path] --verbose --test')
+        .help('help')
+        .version()
+        .argv;
+
+    _argv.serverUrl = 'http://127.0.0.1:' + _argv.port;
+
+    return _argv;
+}
+
+function simpleTest() {
+    var time = getTime();
+    function testAddCallback() {
+        function testReadCallback(values) {
+            if (values.find(v => { return v[0] === time; })) {
+                trace('Test passed!');
+            } else {
+                trace('Test failed!');
+            }
+        }
+        readFromDatabase(testReadCallback);
+    }
+    addToDatabase(time, getNodeVersion(), testAddCallback);
 }

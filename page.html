@@ -4,14 +4,51 @@
     <title>NAPI Demo</title>
     
     <script>
-        var server = "http://127.0.0.1:1338/";
+        function padUnder10(v) {
+            return v < 10 ? '0' + v : v;
+        }
+        
+        function getTime() {
+            var date = new Date();
+            var y = date.getFullYear();
+            var mon = padUnder10(date.getMonth() + 1);
+            var d = padUnder10(date.getDate());
+            var h = padUnder10(date.getHours());
+            var min = padUnder10(date.getMinutes());
+            var s = padUnder10(date.getSeconds());
+            return `${y}/${mon}/${d} ${h}:${min}:${s}`;
+        }
+        
+        function setTime() {
+            var timeDiv = document.getElementById("TimeBucket");
+            if (timeDiv) {
+                timeDiv.innerHTML = `Current time: ${getTime()}`;
+            }
+            setTimeout(setTime, 500);
+        }
  
         function onButtonClicked() {
-            var dbText = document.getElementById("DB_VALUES");
-            dbText.innerHTML += "%DB_ENTRY_STRING%";
+            addEntry(getTime(), "%NODE_VERSION_STRING%");
             var xhttp = new XMLHttpRequest();
-            xhttp.open("GET", server + "OnButtonClicked");
+            xhttp.open("GET", "%SERVER_URL%/OnButtonClicked");
             xhttp.send();
+        }
+        
+        function addEntry(timestamp, version) {
+            var dbText = document.getElementById("DB_VALUES");
+            dbText.innerHTML += getEntryString(timestamp, version);
+        }
+        
+        function getEntryString(timestamp, version) {
+            return `Entry added on: <id class='DBEntry'>${timestamp}</id> by Node version: <id class='DBEntry'>${version}</id><br />`;
+        }
+        
+        function loaded() {
+            setTime();
+            var db_values = JSON.parse('%DB_VALUES%');
+            for(val in db_values) {
+                addEntry(db_values[val][0], db_values[val][1]);
+            }
         }
     </script>
     <style>
@@ -125,14 +162,15 @@
     
 </head>
 
-<body>
+<body onload="loaded();">
 <div class="mainContainer">
-    <div id="header">Node API Demo</div>
-    <i></i>
-    <ul id="NodeVerString">%NODE_VERSION_STRING%</ul>
-    <p class="test"><input class="button" type="submit" value="Add entry to LevelDB database"  onclick='onButtonClicked()'/></p>
-    <hr>
-    <ul id="DB_VALUES">%DB_VALUES%</ul>
-    </div>
+    <div id="header">N-API Demo</div>
+    <ul>Running on Node Version %NODE_VERSION_STRING%</ul>
+    <ul id="TimeBucket"></ul>
+    <p class="test"><input class="button" type="submit" value="Add entry to LevelDB database" onclick='onButtonClicked()'/></p>
+    <hr />
+    <ul id="DB_VALUES"><p class="DBHeader">LevelDown DB entries</p></ul>
+    <br />
+</div>
 </body>
 </html>
