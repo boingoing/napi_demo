@@ -17,7 +17,7 @@ if (argv.test) {
 function createServer() {
     var server = http.createServer(createHomePage);
     server.listen(argv.port);
-    trace('Server running at ' + argv.serverUrl);
+    trace(`Server running at http://127.0.0.1:${argv.port}`);
 }
 
 function createHomePage(request, response) {
@@ -27,11 +27,12 @@ function createHomePage(request, response) {
 
     if(rqUrl === '/') {
         function databaseReadCallback(dbValues) {
+            trace(`Found ${dbValues.length} entries.`);
+            
             //build dynamic values for replacement in HTML Template
             var variableReplacementMap = new Map();
             variableReplacementMap.set('%NODE_VERSION_STRING%', getNodeVersion());
             variableReplacementMap.set('%DB_VALUES%', JSON.stringify(dbValues));
-            variableReplacementMap.set('%SERVER_URL%', argv.serverUrl);
             
             //render HTML
             response.writeHead(200, { "Content-Type": "text/html", 'Cache-control': 'no-cache' });
@@ -39,15 +40,21 @@ function createHomePage(request, response) {
             response.end();
         }
 
+        trace('Fetching entries from leveldown database...');
         readFromDatabase(databaseReadCallback);
     }
     if(rqUrl === "/OnButtonClicked") {
         function successCallback() {
+            trace('Successfully added entry.');
+            
             response.setHeader('Cache-Control', 'no-cache');
             response.end();
         }
 
-        addToDatabase(getTime(), getNodeVersion(), successCallback);
+        var key = getTime();
+        var value = getNodeVersion();
+        trace(`Adding entry for "${key}" to leveldown database...`);
+        addToDatabase(key, value, successCallback);
     }
     if(rqUrl === "/favicon.ico") {
         response.writeHead(404, { "Content-Type": "text/html", 'Cache-control': 'no-cache' });
@@ -62,8 +69,7 @@ function buildFinalHTML(variableMap) {
         //Bad values that are likely an error.
         //We don't want to abort but we should report them for later triage.
         if (value === undefined || value === NaN || value === Infinity) {
-            var msg = 'Potentially bad value encountered in templating -- ' + value + ' @ timestamp ' + Date.now() + '.';
-            trace(msg);
+            trace(`Potentially bad value encountered in templating -- ${value} @ timestamp ${Date.now()}.`);
         }
 
         var allregex = new RegExp(key, 'g')
@@ -99,42 +105,43 @@ function readFromDatabase(callback) {
     var db = getDatabase();
     var dbValues = [];
 
-    trace('leveldown#open...');
+    verboseTrace('leveldown#open...');
     db.open(function(err) {
         if(!err) {
-            trace('leveldown#open succeeded');
+            verboseTrace('leveldown#open succeeded');
             var count = 0;
 
-            trace('leveldown#iterator...');
+            verboseTrace('leveldown#iterator...');
             var iterator = db.iterator({
                 keyAsBuffer: false,
                 valueAsBuffer: false,
                 fillCache: true
             });
-            trace('leveldown#iterator succeeded');
+            verboseTrace('leveldown#iterator succeeded');
 
             function endCallback(err) {
                 if (!err) {
-                    trace("iterator#end succeeded: Found " + count + " entries.");
+                    verboseTrace(`iterator#end succeeded: Found ${count} entries.`);
                 } else {
-                    trace('iterator#end failed: ' + err);
+                    verboseTrace(`iterator#end failed: ${err}`);
                 }
+                verboseTrace('leveldown#close...');
                 db.close(function(err){
                     if (!err) {
-                        trace('leveldown#close succeeded');
+                        verboseTrace('leveldown#close succeeded');
                         callback(dbValues);
                     } else {
-                        trace('leveldown#close failed: ' + err);
+                        verboseTrace('leveldown#close failed: ' + err);
                     }
                 });
             }
 
             function nextCallback(err, key, value) {
                 if (!err) {
-                    verboseTrace('iterator#next succeeded');
+                    verboseTrace(`iterator#next succeeded: key="${key}" value="${value}"`);
 
                     if (err === undefined && key === undefined && value === undefined) {
-                        trace('iterator#end...');
+                        verboseTrace('iterator#end...');
                         iterator.end(endCallback);
                     } else {
                         dbValues.push([key, value]);
@@ -144,14 +151,14 @@ function readFromDatabase(callback) {
                         iterator.next(nextCallback);
                     }
                 } else {
-                    trace("iterator#next failed: " + err);
+                    verboseTrace("iterator#next failed: " + err);
                 }
             }
 
-            trace("iterator#next...");
+            verboseTrace("iterator#next...");
             iterator.next(nextCallback);
         } else {
-            trace('leveldown#open failed: ' + err);
+            verboseTrace('leveldown#open failed: ' + err);
         }
     });
 }
@@ -159,31 +166,31 @@ function readFromDatabase(callback) {
 function addToDatabase(key, value, callback) {
     var db = getDatabase();
     
-    trace('leveldown#open...');
+    verboseTrace('leveldown#open...');
     db.open(function(err) {
         if(!err) {
-            trace('leveldown#open succeeded');
-            trace('leveldown#put("' + key + '", "' + value + '")...');
+            verboseTrace('leveldown#open succeeded');
+            verboseTrace('leveldown#put("' + key + '", "' + value + '")...');
 
             db.put(key, value, { sync: true }, function(err) {
                 if(!err) {
-                    trace('leveldown#put succeeded');
+                    verboseTrace('leveldown#put succeeded');
                 } else {
-                    trace('leveldown#put failed: ' + err);
+                    verboseTrace('leveldown#put failed: ' + err);
                 }
 
-                trace('leveldown#close...');
+                verboseTrace('leveldown#close...');
                 db.close(function(err) {
                     if (!err) {
-                        trace('leveldown#close succeeded');
+                        verboseTrace('leveldown#close succeeded');
                         callback();
                     } else {
-                        trace('leveldown#close failed: ' + err);
+                        verboseTrace('leveldown#close failed: ' + err);
                     }
                 });
             });
         } else {
-            trace('leveldown#open failed: ' + err);
+            verboseTrace('leveldown#open failed: ' + err);
         }
     });
 }
@@ -224,8 +231,6 @@ function parseArgs(yargs) {
         .help('help')
         .version()
         .argv;
-
-    _argv.serverUrl = 'http://127.0.0.1:' + _argv.port;
 
     return _argv;
 }

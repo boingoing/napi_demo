@@ -30,7 +30,7 @@
         function onButtonClicked() {
             addEntry(getTime(), "%NODE_VERSION_STRING%");
             var xhttp = new XMLHttpRequest();
-            xhttp.open("GET", "%SERVER_URL%/OnButtonClicked");
+            xhttp.open("GET", "/OnButtonClicked");
             xhttp.send();
         }
         
