@@ -5,6 +5,8 @@ var yargs = require("yargs");
 require('es6-shim');
 
 var argv = parseArgs(yargs);
+const useLogFile = argv.log != '';
+const logFileStream =  useLogFile ? fs.createWriteStream(argv.log, { flags: 'a' }) : undefined;
 
 trace('Detected Node: ' + getNodeVersion());
 
@@ -197,6 +199,9 @@ function addToDatabase(key, value, callback) {
 
 function trace(msg) {
     console.log(msg);
+    if (useLogFile) {
+        logFileStream.write(`${msg}\n`);
+    }
 }
 
 function verboseTrace(msg) {
@@ -227,7 +232,12 @@ function parseArgs(yargs) {
             type: 'boolean',
             describe: 'Perform a simple test of the leveldown module (Does not start the http server)'
         })
-        .usage('Simple http server using leveldown to test Node.js with N-API.\nUsage: $0 --port [number] --path [database_path] --verbose --test')
+        .option('log', {
+            default: '',
+            type: 'string',
+            describe: 'Filename of an optional log'
+        })
+        .usage('Simple http server using leveldown to test Node.js with N-API.\nUsage: $0 --port [number] --path [database_path] --verbose --test --log [filename]')
         .help('help')
         .version()
         .argv;
